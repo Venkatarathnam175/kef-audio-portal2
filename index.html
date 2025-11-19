@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>KEF Audio Analysis Portal</title>
+
+  <!-- jsPDF for PDF download -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    :root{
+      --kef-blue: #003874;
+      --kef-gold: #F2A900;
+      --white: #ffffff;
+      --muted: #F5F5F5;
+      --card-radius: 12px;
+      --shadow: 0 10px 30px rgba(2,6,23,0.08);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,var(--muted),#ffffff);color:#0b2540}
+
+    header{background:var(--kef-blue);color:var(--white);padding:22px 20px;display:flex;align-items:center;gap:16px}
+    .logo{width:56px;height:56px;border-radius:8px;background:linear-gradient(135deg,var(--kef-gold),#ffd77a);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--kef-blue);box-shadow:0 8px 20px rgba(0,0,0,0.12)}
+    .brand{font-size:18px;font-weight:700}
+    .subtitle{font-size:13px;opacity:0.95}
+
+    .container{max-width:1100px;margin:22px auto;padding:18px}
+    .layout{display:flex;gap:20px}
+    @media(max-width:980px){.layout{flex-direction:column}}
+
+    .left{flex:1}
+    .right{width:420px}
+
+    .card{background:var(--white);border-radius:var(--card-radius);box-shadow:var(--shadow);padding:16px}
+
+    .drop{border:2px dashed #dfe7f2;border-radius:12px;padding:20px;text-align:center;cursor:pointer;background:linear-gradient(180deg,rgba(0,0,0,0.02),transparent)}
+    .drop.dragover{border-color:var(--kef-blue);background:rgba(0,62,116,0.03)}
+    .muted{color:#506072;font-size:14px}
+
+    .btn{display:inline-flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;border:0;cursor:pointer;font-weight:700}
+    .btn--primary{background:var(--kef-blue);color:var(--white)}
+    .btn--ghost{background:transparent;border:1px solid #e6eefb;color:var(--kef-blue)}
+
+    .progress{height:12px;background:#eef5ff;border-radius:10px;overflow:hidden}
+    .progress > i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--kef-gold),#ffd77a)}
+
+    /* Cards list */
+    .cards{display:flex;flex-direction:column;gap:14px;margin-top:12px}
+
+    .record{border-radius:10px;padding:12px;background:linear-gradient(180deg,#ffffff,#fbfdff);border:1px solid #eef6ff}
+    .record-head{display:flex;gap:12px;align-items:center}
+    .rec-title{font-weight:700;color:var(--kef-blue)}
+    .rec-sub{font-size:13px;color:#506072}
+
+    .fields{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+    @media(max-width:640px){.fields{grid-template-columns:1fr}}
+    .field{background:#f8fbff;padding:8px;border-radius:8px;border:1px solid #eef6ff}
+    .f-label{font-weight:700;color:#1f496b;font-size:12px}
+    .f-val{font-size:13px;color:#123}
+
+    .section-title{font-weight:700;color:#233f5a;margin-top:12px}
+    .tiny{font-size:12px;color:#6d7d89}
+
+    .actions{display:flex;gap:8px;margin-top:12px}
+
+    footer{margin-top:18px;text-align:center;color:#6d7d89;font-size:13px}
+  </style>
+</head>
+<body>
+  <header>
+    <img src="REPLACE_WITH_LOGO_URL" alt="Kotak Education Foundation" class="logo" style="width:140px;height:auto;border-radius:0;box-shadow:none;background:none;object-fit:contain;"/>
+    <div>
+      <div class="brand">KEF Audio Analysis Portal</div>
+      <div class="subtitle">Kotak Education Foundation — Voice-based learning insights</div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="layout">
+
+      <!-- LEFT: Upload and records -->
+      <div class="left">
+        <div class="card">
+          <h3 style="margin:0 0 8px 0">Upload audio</h3>
+          <p class="muted" style="margin:0 0 12px 0">Drag & drop or select an audio file. File is uploaded to your Drive folder and processed by the KEF n8n pipeline. Results will appear below as cards.</p>
+
+          <div id="dropZone" class="drop" tabindex="0">
+            <div style="font-weight:700;margin-bottom:6px">Drag & drop audio here</div>
+            <div class="muted">Supported: mp3, wav, m4a. Max 20 MB recommended.</div>
+            <div style="margin-top:12px">
+              <input id="fileInput" type="file" accept="audio/*" style="display:none">
+              <button class="btn btn--primary" id="chooseBtn">Choose file</button>
+            </div>
+          </div>
+
+          <div id="progressWrap" style="display:none;margin-top:12px">
+            <div class="progress"><i id="progressBar"></i></div>
+            <div class="tiny" id="statusText">Uploading...</div>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-top:12px;align-items:center">
+            <button class="btn btn--primary" id="uploadBtn" disabled>Start Upload</button>
+            <button class="btn btn--ghost" id="cancelBtn" style="display:none">Cancel</button>
+            <div style="margin-left:auto" class="tiny">Secure · KEF</div>
+          </div>
+
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <h3 style="margin:0 0 8px 0">Uploaded records</h3>
+          <p class="muted" style="margin:0 0 8px 0">Latest processed conversations appear here. Tap a card to expand and view all 26 fields. Use the download buttons for a PDF or text file.</p>
+
+          <div id="cards" class="cards"></div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Filters & quick view -->
+      <aside class="right">
+        <div class="card">
+          <h4 style="margin:0 0 8px 0">Quick view</h4>
+          <div id="quick" class="muted">Select a card to view details here.</div>
+
+          <div style="margin-top:12px;display:flex;gap:8px">
+            <button id="downloadPdf" class="btn btn--primary">Download PDF</button>
+            <button id="downloadTxt" class="btn btn--ghost">Download Text</button>
+            <button id="refreshBtn" class="btn" style="background:#eef7ff;border-radius:8px;margin-left:auto">Refresh</button>
+          </div>
+
+          <hr style="margin:12px 0">
+          <div class="tiny">Filter</div>
+          <input id="qStudent" placeholder="Search student ID or mentor" style="width:100%;padding:8px;border-radius:8px;border:1px solid #e8f1fb;margin-top:8px">
+          <button id="applyFilter" class="btn btn--primary" style="margin-top:8px;width:100%">Apply</button>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <div class="tiny">How it works</div>
+          <ol style="padding-left:18px;margin-top:6px">
+            <li class="tiny">Upload audio → stored to Drive</li>
+            <li class="tiny">n8n pipeline analyzes and writes to Sheet</li>
+            <li class="tiny">This portal polls the Sheet and shows cards</li>
+          </ol>
+        </div>
+      </aside>
+    </div>
+
+    <footer>
+      <div class="tiny">This portal uploads files to the KEF Drive folder and polls the KEF Google Sheet for analysis results.</div>
+    </footer>
+  </main>
+
+  <script>
+    /*****************************************
+     * CONFIGURATION — Replace the URLs and IDs below
+     * - UPLOAD_URL: Google Apps Script Web App URL (POST) that accepts file uploads and returns {status,fileId,fileName}
+     * - GET_RESULTS_URL: Google Apps Script Web App URL (GET) that returns JSON array of results (mapping for all 26 columns)
+     *****************************************/
+    const UPLOAD_URL = "https://script.google.com/macros/s/AKfycbwoFC_OiKxSu0fCSogCwZzwLFF60zB4S-rmNvYjaN4b8gQDvYgfDldMmgoieMVRdM5X/exec"; // POST
+    const GET_RESULTS_URL = "https://script.google.com/macros/s/AKfycbwoFC_OiKxSu0fCSogCwZzwLFF60zB4S-rmNvYjaN4b8gQDvYgfDldMmgoieMVRdM5X/exec"; // GET
+
+    // UI elements
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const chooseBtn = document.getElementById('chooseBtn');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const cancelBtn = document.getElementById('cancelBtn');
+    const progressWrap = document.getElementById('progressWrap');
+    const progressBar = document.getElementById('progressBar');
+    const statusText = document.getElementById('statusText');
+    const cardsDiv = document.getElementById('cards');
+    const quick = document.getElementById('quick');
+    const downloadPdf = document.getElementById('downloadPdf');
+    const downloadTxt = document.getElementById('downloadTxt');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const qStudent = document.getElementById('qStudent');
+    const applyFilter = document.getElementById('applyFilter');
+
+    let selectedFile = null;
+    let controller = null;
+    let latestResults = [];
+    let currentRecord = null;
+
+    // handle file selection
+    dropZone.addEventListener('click', () => fileInput.click());
+    chooseBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); handleFile(e.dataTransfer.files[0]); });
+
+    function handleFile(file){
+      if(!file) return;
+      if(!file.type.startsWith('audio/')) return alert('Please upload an audio file');
+      selectedFile = file;
+      uploadBtn.disabled = false;
+      dropZone.querySelector('div').textContent = file.name + ' • ' + Math.round(file.size/1024) + ' KB';
+    }
+
+    uploadBtn.addEventListener('click', async ()=>{
+      if(!selectedFile) return alert('No file selected');
+      uploadBtn.disabled = true; cancelBtn.style.display='inline-flex'; progressWrap.style.display='block'; setProgress(0);
+      try{
+        controller = new AbortController();
+        const form = new FormData();
+        form.append('file', selectedFile, selectedFile.name);
+        statusText.textContent = 'Uploading file...';
+        const res = await fetch(UPLOAD_URL, { method:'POST', body: form, signal: controller.signal });
+        const data = await res.json();
+        if(data.status === 'success'){
+          statusText.textContent = 'Uploaded. Processing started.'; setProgress(30);
+          addTempCard(data.fileName, data.fileId);
+          pollForResult(data.fileName);
+        } else throw new Error(data.message || 'Upload failed');
+      }catch(err){ if(err.name==='AbortError') statusText.textContent='Upload cancelled'; else statusText.textContent = 'Error: '+err.message; uploadBtn.disabled=false; }
+      finally{ cancelBtn.style.display='none'; }
+    });
+
+    cancelBtn.addEventListener('click', ()=>{ if(controller) controller.abort(); cancelBtn.style.display='none'; uploadBtn.disabled=false; });
+    function setProgress(p){ progressBar.style.width = Math.min(100,Math.max(0,p)) + '%'; }
+
+    function addTempCard(name,id){
+      const div = document.createElement('div'); div.className='record';
+      div.innerHTML = `<div class="record-head"><div><div class="rec-title">${escapeHtml(name)}</div><div class="rec-sub">Uploading — awaiting processing</div></div></div>`;
+      cardsDiv.prepend(div);
+    }
+
+    // Polling logic
+    async function pollForResult(fileName){
+      let attempts=0; const maxFast=12; let interval=4000;
+      return new Promise((resolve,reject)=>{
+        const check = async ()=>{
+          attempts++;
+          try{
+            statusText.textContent = 'Waiting for analysis result... (attempt '+attempts+')';
+            const all = await fetchResults(); setProgress(60 + Math.min(30, attempts*3));
+            const match = all.find(r => (r.audioFile && r.audioFile.indexOf(fileName)!==-1) || (r.fileName && r.fileName.indexOf(fileName)!==-1));
+            if(match){ showRecord(match, all); resolve(match); return clearInterval(timer); }
+            if(attempts===maxFast){ clearInterval(timer); interval=15000; timer=setInterval(check, interval); }
+            if(attempts>60){ clearInterval(timer); statusText.textContent='No result found yet. Check sheet.'; reject(new Error('timeout')); }
+          }catch(err){ console.error(err); }
+        };
+        let timer = setInterval(check, interval); check();
+      });
+    }
+
+    async function fetchResults(){
+      try{
+        const res = await fetch(GET_RESULTS_URL + '?_ts=' + Date.now());
+        const json = await res.json(); latestResults = json.filter(r => r && (r.studentId || r.audioFile)); return latestResults;
+      }catch(err){ console.error('fetchResults',err); return [] }
+    }
+
+    // Render cards (card view selected)
+    function renderCards(list){
+      cardsDiv.innerHTML = '';
+      (list||[]).slice().reverse().forEach(rec=>{
+        const d = document.createElement('div'); d.className='record';
+        d.innerHTML = buildCardHtml(rec);
+        d.addEventListener('click', ()=>{ showRecord(rec, list); });
+        cardsDiv.appendChild(d);
+      });
+    }
+
+    function buildCardHtml(r){
+      // show compact header and a few key fields
+      const header = `<div class="record-head"><div><div class="rec-title">${escapeHtml(r.studentId||r.sn||'Unnamed')}</div><div class="rec-sub">Mentor: ${escapeHtml(r.mentor||'—')} · File: ${escapeHtml(r.audioFile||'—')}</div></div></div>`;
+      const short = `<div style=\"margin-top:8px;\"><div class=\"section-title\">Overall Summary</div><div class=\"tiny\">${escapeHtml(shorten(r.summary,240))}</div></div>`;
+      return header + short;
+    }
+
+    // Show full record in quick panel and expand card to show all fields
+    function showRecord(r, all){
+      currentRecord = r; quick.innerHTML = buildFullHtml(r);
+      // also expand the card display with all fields
+      renderCards(all);
+      // scroll to top of quick view
+      window.scrollTo({top:0,behavior:'smooth'});
+    }
+
+    function buildFullHtml(r){
+      const fields = [
+        ['SN.NO', r.sn], ['Mentor', r.mentor], ['Student ID', r.studentId], ['Audio File', r.audioFile], ['Overall Summary', r.summary],
+        ['Voice Modulation', r.voiceModulation], ['Supportive Environment', r.supportiveEnvironment], ['Positive Approach', r.positiveApproach], ['Polite Introduction', r.politeIntroduction], ['Language Comfort', r.languageComfort],
+        ['Active Listening', r.activeListening], ['Positive Language', r.positiveLanguage], ['Probing Questions', r.probingQuestions], ['Open-Ended Questions', r.openQuestions], ['Student Comfort', r.studentComfort],
+        ['Exploration of Areas', r.explorationAreas], ['Academic Progress', r.academicProgress], ['Career Goals', r.careerGoals], ['Challenges Identified', r.challengesIdentified], ['Guidance Provided', r.guidanceProvided],
+        ['Scholarship Discussion', r.scholarshipDiscussion], ['Next Steps', r.nextSteps], ['Student Agreed', r.studentAgreed], ['Mentor Listened', r.mentorListened], ['Provides Guidance', r.providesGuidance], ['Overall Impact', r.overallImpact]
+      ];
+
+      let html = '<div>';
+      html += `<div class="rec-title">${escapeHtml(r.studentId||r.sn||'Unnamed')}</div>`;
+      html += `<div class="rec-sub" style="margin-bottom:10px">Mentor: ${escapeHtml(r.mentor||'—')} · File: ${escapeHtml(r.audioFile||'—')}</div>`;
+
+      html += '<div class="section-title">Overall Summary</div>';
+      html += `<div class="tiny" style="margin-bottom:10px">${escapeHtml(r.summary||'—')}</div>`;
+
+      html += '<div class="section-title">Detailed Scores & Notes</div>';
+      html += '<div class="fields">';
+      fields.forEach(f=>{ html += `<div class="field"><div class="f-label">${escapeHtml(f[0])}</div><div class="f-val">${escapeHtml(f[1]||'—')}</div></div>` });
+      html += '</div>';
+      html += '</div>';
+      return html;
+    }
+
+    // Download handlers (PDF & TXT include all 26 fields)
+    downloadTxt.addEventListener('click', ()=>{
+      if(!currentRecord) return alert('Select a record first');
+      const txt = formatRecordText(currentRecord);
+      const blob = new Blob([txt],{type:'text/plain'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = (currentRecord.studentId||currentRecord.sn||'result') + '.txt'; a.click(); URL.revokeObjectURL(url);
+    });
+
+    downloadPdf.addEventListener('click', ()=>{
+      if(!currentRecord) return alert('Select a record first');
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({unit:'pt',format:'a4'});
+      const margin = 40; let y = 40;
+      doc.setFontSize(16); doc.setTextColor(0,50,120); doc.text('KEF Audio Analysis Result', margin, y); y += 26;
+      doc.setFontSize(11); doc.text('Student ID: ' + (currentRecord.studentId||''), margin, y); y += 16;
+      doc.text('Mentor: ' + (currentRecord.mentor||''), margin, y); y += 18;
+      y += 6; doc.setLineWidth(0.5); doc.line(margin,y, 595-margin, y); y += 14;
+
+      const addBlock = (title, txt) => {
+        doc.setFontSize(11); doc.setTextColor(0,0,0); doc.text(title + ':', margin, y); y += 14;
+        const split = doc.splitTextToSize(txt || '—', 595-2*margin);
+        doc.setFontSize(10); doc.text(split, margin, y);
+        y += split.length * 12 + 10;
+        if(y > 750){ doc.addPage(); y = 40; }
+      };
+
+      addBlock('Overall Summary', currentRecord.summary);
+
+      const fields = [
+        ['Voice Modulation', currentRecord.voiceModulation], ['Supportive Environment', currentRecord.supportiveEnvironment], ['Positive Approach', currentRecord.positiveApproach],
+        ['Polite Introduction', currentRecord.politeIntroduction], ['Language Comfort', currentRecord.languageComfort], ['Active Listening', currentRecord.activeListening],
+        ['Positive Language', currentRecord.positiveLanguage], ['Probing Questions', currentRecord.probingQuestions], ['Open-Ended Questions', currentRecord.openQuestions],
+        ['Student Comfort', currentRecord.studentComfort], ['Exploration', currentRecord.explorationAreas], ['Academic Progress', currentRecord.academicProgress],
+        ['Career Goals', currentRecord.careerGoals], ['Challenges Identified', currentRecord.challengesIdentified], ['Guidance Provided', currentRecord.guidanceProvided],
+        ['Scholarship Discussion', currentRecord.scholarshipDiscussion], ['Next Steps', currentRecord.nextSteps], ['Student Agreed', currentRecord.studentAgreed],
+        ['Mentor Listened', currentRecord.mentorListened], ['Provides Guidance', currentRecord.providesGuidance], ['Overall Impact', currentRecord.overallImpact]
+      ];
+
+      fields.forEach(f => { addBlock(f[0], f[1]); });
+      doc.setProperties({ title: 'KEF Audio Analysis - ' + (currentRecord.studentId||currentRecord.sn||'result') });
+      doc.save((currentRecord.studentId||currentRecord.sn||'result') + '.pdf');
+    });
+
+    function formatRecordText(r){
+      const lines = [];
+      lines.push('SN.NO: ' + (r.sn||''));
+      lines.push('Mentor: ' + (r.mentor||''));
+      lines.push('Student ID: ' + (r.studentId||''));
+      lines.push('Audio File: ' + (r.audioFile||''));
+      lines.push('\nOverall Summary:\n' + (r.summary||''));
+      lines.push('\nFields:');
+      const keys = ['voiceModulation','supportiveEnvironment','positiveApproach','politeIntroduction','languageComfort','activeListening','positiveLanguage','probingQuestions','openQuestions','studentComfort','explorationAreas','academicProgress','careerGoals','challengesIdentified','guidanceProvided','scholarshipDiscussion','nextSteps','studentAgreed','mentorListened','providesGuidance','overallImpact'];
+      keys.forEach(k=>{ lines.push(k + ': ' + (r[k]||'')); });
+      return lines.join('\n');
+    }
+
+    // Filtering
+    applyFilter.addEventListener('click', async ()=>{ const q = qStudent.value.trim().toLowerCase(); const all = await fetchResults(); const filtered = all.filter(r => (r.studentId||'').toLowerCase().includes(q) || (r.mentor||'').toLowerCase().includes(q)); renderCards(filtered); });
+
+    refreshBtn.addEventListener('click', async ()=>{ statusText && (statusText.textContent='Refreshing...'); const all = await fetchResults(); renderCards(all); statusText && (statusText.textContent='Refreshed'); });
+
+    // Utilities
+    function escapeHtml(s){ if(!s) return ''; return String(s).replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"})[c]); }
+    function shorten(t,n=120){ if(!t) return ''; return t.length>n ? t.slice(0,n-1)+'…' : t; }
+
+    // initial load
+    (async ()=>{ try{ const all = await fetchResults(); renderCards(all); if(all.length) showRecord(all[0], all); }catch(e){ console.error(e); } })();
+  </script>
+
+  <!--
+    --- APPS SCRIPT: deploy this as your Web App (script.google.com)
+    Replace YOUR_DRIVE_FOLDER_ID and YOUR_SHEET_ID then Deploy -> New deployment -> Web app
+
+    Paste this code in Google Apps Script project (Code.gs)
+  -->
+  <!--
+  function doPost(e) {
+    try {
+      const folderId = "YOUR_DRIVE_FOLDER_ID";
+      const folder = DriveApp.getFolderById(folderId);
+
+      // if using multipart/form-data: e.blob or e.files
+      var fileBlob = e && e.postData && e.postData.type && e.postData.contents ? Utilities.newBlob(Utilities.base64Decode(e.postData.contents), e.postData.type, e.parameter && e.parameter.filename ? e.parameter.filename : 'upload') : null;
+
+      // Fallback: use e.files
+      if(!fileBlob && e && e.files && e.files.file) fileBlob = e.files.file;
+      if(!fileBlob) throw new Error('No file blob found in request');
+
+      const file = folder.createFile(fileBlob);
+      file.setSharing(DriveApp.Access.ANYONE, DriveApp.Permission.VIEW);
+
+      return ContentService.createTextOutput(JSON.stringify({status: 'success', fileId: file.getId(), fileName: file.getName()})).setMimeType(ContentService.MimeType.JSON);
+    } catch (err) {
+      return ContentService.createTextOutput(JSON.stringify({status: 'error', message: err.toString()})).setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+
+  function doGet(e) {
+    const ss = SpreadsheetApp.openById('YOUR_SHEET_ID');
+    const sheet = ss.getSheetByName('Sheet1');
+    const data = sheet.getDataRange().getValues();
+
+    // Map header columns to JS object fields — adapt if your header row differs
+    const results = data.slice(1).map(row => ({
+      sn: row[0],
+      mentor: row[1],
+      studentId: row[2],
+      audioFile: row[3],
+      summary: row[4],
+      voiceModulation: row[5],
+      supportiveEnvironment: row[6],
+      positiveApproach: row[7],
+      politeIntroduction: row[8],
+      languageComfort: row[9],
+      activeListening: row[10],
+      positiveLanguage: row[11],
+      probingQuestions: row[12],
+      openQuestions: row[13],
+      studentComfort: row[14],
+      explorationAreas: row[15],
+      academicProgress: row[16],
+      careerGoals: row[17],
+      challengesIdentified: row[18],
+      guidanceProvided: row[19],
+      scholarshipDiscussion: row[20],
+      nextSteps: row[21],
+      studentAgreed: row[22],
+      mentorListened: row[23],
+      providesGuidance: row[24],
+      overallImpact: row[25]
+    }));
+
+    return ContentService.createTextOutput(JSON.stringify(results)).setMimeType(ContentService.MimeType.JSON);
+  }
+  -->
+</body>
+</html>
