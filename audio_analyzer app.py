@@ -156,44 +156,26 @@ with left:
     start_upload = st.button("Start Upload")
 
     # ---- FIXED UPLOAD LOGIC ----
-    if start_upload:
-        if not audio_file:
-            st.warning("Please select an audio file first.")
-        else:
-            try:
-                status_msg.info("Uploading file…")
-                progress.progress(10)
+   if start_upload:
+    if not audio_file:
+        st.warning("Please select an audio file first.")
+    else:
+        try:
+            status_msg.info("Uploading file…")
+            progress.progress(10)
 
-                files = {
-                    "file": (
-                        audio_file.name,
-                        audio_file,
-                        audio_file.type or "application/octet-stream"
-                    )
-                }
-
-                resp = requests.post(APPS_SCRIPT_URL, files=files, timeout=120)
-
-                try:
-                    data = resp.json()
-                except:
-                    st.error("Apps Script returned non-JSON:")
-                    st.error(resp.text)
-                    data = None
-
-            except Exception as e:
-                st.error(f"Upload error: {e}")
-                data = None
-
-            if data and data.get("status") == "success":
-                status_msg.success("Upload successful!")
-                progress.progress(40)
-
-                file_name = data.get("fileName") or audio_file.name
-                poll_until_result(file_name, status_msg, progress)
-
-            else:
-                st.error(f"Upload failed: {data}")
+            # --- NEW APPROACH: Send file as raw bytes with a query param ---
+            # Reset the file pointer to the beginning
+            audio_file.seek(0)
+            
+            # Prepare the data as a single blob (Apps Script doPost gets this as e.postData.contents)
+            resp = requests.post(
+                APPS_SCRIPT_URL, 
+                data=audio_file.read(), # Send raw file content
+                headers={"Content-Type": audio_file.type or "application/octet-stream"},
+                params={"filename": audio_file.name}, # Send filename separately
+                timeout=120
+            )
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -290,3 +272,4 @@ with right:
 
 # Footer
 st.markdown("<div class='kef-tiny' style='text-align:center;'>KEF Audio Analysis Portal</div>", unsafe_allow_html=True)
+
