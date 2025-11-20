@@ -201,48 +201,41 @@
       dropZone.querySelector('div').textContent = file.name + ' • ' + Math.round(file.size/1024) + ' KB';
     }
 
-   uploadBtn.addEventListener('click', async () => {
-  if (!selectedFile) return alert("No file selected");
+  uploadBtn.addEventListener('click', async () => {
+  if (!selectedFile) {
+    alert("No file selected");
+    return;
+  }
 
   uploadBtn.disabled = true;
-  progressWrap.style.display = "block";
-  statusText.textContent = "Uploading...";
-  setProgress(10);
+  statusText.textContent = "Uploading file...";
 
-  const reader = new FileReader();
-  reader.onload = async function() {
-    const base64 = reader.result.split(",")[1];
+  const form = new FormData();
+  form.append("file", selectedFile);
 
-    const body = new URLSearchParams({
-      file: base64,
-      filename: selectedFile.name,
-      mimetype: selectedFile.type
-    });
-
-    const res = await fetch(APPS_SCRIPT_URL, {
+  try {
+    const res = await fetch(UPLOAD_URL, {
       method: "POST",
-      body
+      body: form
     });
 
     const data = await res.json();
-    console.log(data);
 
     if (data.status === "success") {
-      statusText.textContent = "Uploaded. n8n processing...";
-      setProgress(40);
-
+      statusText.textContent = "Upload successful. Processing started.";
       addTempCard(data.fileName, data.fileId);
-
-      // start polling
       pollForResult(data.fileName);
     } else {
-      statusText.textContent = "Error: " + data.message;
-      uploadBtn.disabled = false;
+      statusText.textContent = "Upload failed: " + data.message;
     }
-  };
 
-  reader.readAsDataURL(selectedFile);
+  } catch (err) {
+    statusText.textContent = "Error uploading: " + err;
+  }
+
+  uploadBtn.disabled = false;
 });
+
 
 
     cancelBtn.addEventListener('click', ()=>{ if(controller) controller.abort(); cancelBtn.style.display='none'; uploadBtn.disabled=false; });
