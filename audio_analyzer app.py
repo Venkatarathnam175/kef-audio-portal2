@@ -2,10 +2,12 @@ import streamlit as st
 import requests
 import time
 from io import BytesIO
-from fpdf import FPDF
 
 # ---------------- CONFIG ----------------
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby6_8MTPj2qquGkEv9zVvaCYH2aljIiZGDiCr6MJSbPZaKBjhlH_noC1XGr5skVMbnc/exec"
+# !!! IMPORTANT !!!
+# 1. Deploy the Apps Script (File 2) as a Web App (Execute as: Me, Who has access: Anyone).
+# 2. Use the final URL ending in /exec here.
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyLCsEVZW-2raN1Wv9paHPQ7L4F1gnIFf50mJX8gde_BtJh-tyz3jBlq5z9V8FheotY/exec" 
 
 st.set_page_config(
     page_title="KEF Audio Analysis Portal",
@@ -85,26 +87,30 @@ if "selected_index" not in st.session_state:
 
 # ---------------- HELPERS ----------------
 def fetch_results():
+    """Fetches analysis results from the Google Sheet via Apps Script doGet."""
     try:
         resp = requests.get(APPS_SCRIPT_URL, timeout=20)
         data = resp.json()
         if isinstance(data, list):
+            # Filter out empty rows if necessary
             rows = [r for r in data if r.get("studentId") or r.get("audioFile")]
         else:
             rows = []
         st.session_state.records = rows
         return rows
     except Exception as e:
-        st.error(f"Error fetching results: {e}")
+        st.error(f"Error fetching results (doGet): {e}")
         return st.session_state.records
 
 
 def short(text, n=200):
+    """Truncates text for summary preview."""
     if not text: return ""
     return text if len(text) <= n else text[:n] + "…"
 
 
 def poll_until_result(file_name, placeholder, progress):
+    """Polls the Apps Script every 4 seconds until the file analysis appears in the sheet."""
     for attempt in range(1, 61):
         time.sleep(4)
         progress.progress(min(100, attempt * 2))
@@ -112,12 +118,13 @@ def poll_until_result(file_name, placeholder, progress):
 
         rows = fetch_results()
         for i, r in enumerate(rows):
-            if file_name in str(r.get("audioFile", "")):
+            # Check if the uploaded file name is in the result (case-insensitive check added)
+            if file_name.lower() in str(r.get("audioFile", "")).lower():
                 st.success("Analysis complete!")
                 st.session_state.selected_index = i
                 return True
 
-    st.error("Timeout. Try refreshing records.")
+    st.error("Timeout. Analysis took too long. Try refreshing records manually.")
     return False
 
 
@@ -155,28 +162,49 @@ with left:
 
     start_upload = st.button("Start Upload")
 
-    # ---- FIXED UPLOAD LOGIC ----
-   if start_upload:
-    if not audio_file:
-        st.warning("Please select an audio file first.")
-    else:
-        try:
-            status_msg.info("Uploading file…")
-            progress.progress(10)
+    # ---- CORRECTED UPLOAD LOGIC ----
+    if start_upload:
+        if not audio_file:
+            st.warning("Please select an audio file first.")
+        else:
+            try:
+                status_msg.info("Uploading file…")
+                progress.progress(10)
 
-            # --- NEW APPROACH: Send file as raw bytes with a query param ---
-            # Reset the file pointer to the beginning
-            audio_file.seek(0)
-            
-            # Prepare the data as a single blob (Apps Script doPost gets this as e.postData.contents)
-            resp = requests.post(
-                APPS_SCRIPT_URL, 
-                data=audio_file.read(), # Send raw file content
-                headers={"Content-Type": audio_file.type or "application/octet-stream"},
-                params={"filename": audio_file.name}, # Send filename separately
-                timeout=120
-            )
+                # --- NEW APPROACH: Send file as raw bytes with a query param ---
+                audio_file.seek(0)
+                
+                # Send raw file content in 'data' field, and filename via 'params'
+                resp = requests.post(
+                    APPS_SCRIPT_URL, 
+                    data=audio_file.read(),
+                    headers={"Content-Type": audio_file.type or "application/octet-stream"},
+                    params={"filename": audio_file.name},
+                    timeout=120
+                )
 
+                # --- Handle Apps Script Response ---
+                try:
+                    data = resp.json()
+                except:
+                    st.error("Apps Script returned non-JSON. Check Apps Script logs for errors.")
+                    st.error(resp.text)
+                    data = None
+                
+                if data and data.get("status") == "success":
+                    status_msg.success("Upload successful! Starting analysis watch.")
+                    progress.progress(40)
+
+                    file_name = data.get("fileName") or audio_file.name
+                    # Start polling for the result in the Google Sheet
+                    poll_until_result(file_name, status_msg, progress)
+
+                else:
+                    st.error(f"Upload failed: {data}")
+
+            except Exception as e:
+                st.error(f"Upload error (requests failed): {e}")
+                
     st.markdown('</div>', unsafe_allow_html=True)
 
     # Records block
@@ -199,8 +227,9 @@ with left:
 </div>
 """, unsafe_allow_html=True)
 
-        if st.button("Open", key=f"open_{real_idx}"):
-            st.session_state.selected_index = real_idx
+        # Use a lambda function to update the state when the button is pressed
+        if st.button("Open", key=f"open_{real_idx}", on_click=lambda i=real_idx: st.session_state.__setitem__('selected_index', i)):
+            pass
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -246,10 +275,12 @@ with right:
 
         html = '<div class="kef-fields-grid">'
         for label, key in fields:
+            # Use '—' for empty values
+            value = str(rec.get(key, '—')) if rec.get(key) is not None else '—'
             html += f"""
 <div class="kef-field">
   <div class="kef-field-label">{label}</div>
-  <div class="kef-field-val">{rec.get(key,'—')}</div>
+  <div class="kef-field-val">{value}</div>
 </div>
 """
         html += "</div>"
@@ -272,4 +303,3 @@ with right:
 
 # Footer
 st.markdown("<div class='kef-tiny' style='text-align:center;'>KEF Audio Analysis Portal</div>", unsafe_allow_html=True)
-
