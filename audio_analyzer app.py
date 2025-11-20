@@ -5,7 +5,7 @@ from io import BytesIO
 from fpdf import FPDF
 
 # ---------------- CONFIG ----------------
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzhb7aDy1JmkvXq7yi-JmSNh-prrxcpJZM2Oo4QLpWw7KETj3hKx9qHHzVyKAcbbwhK/exec"
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw6s8RK9-8-YowGCRaUUGolHXbgWk78DcJbO2fZ-jOEQCjq1MQMx3z2Sg6ti8Gj16aP/exec"
 
 st.set_page_config(
     page_title="KEF Audio Analysis Portal",
@@ -81,26 +81,6 @@ html, body, [data-testid="stAppViewContainer"] {
   background:linear-gradient(180deg,rgba(0,0,0,0.02),transparent);
 }
 
-/* Buttons */
-.stButton>button {
-  border-radius:10px;
-  padding:0.45rem 0.95rem;
-  font-weight:700;
-  border:0;
-}
-.stButton>button.kef-primary{
-  background:#003874;
-  color:#ffffff;
-}
-.stButton>button.kef-ghost{
-  background:transparent;
-  color:#003874;
-  border:1px solid #e6eefb;
-}
-.stButton>button.kef-full{
-  width:100%;
-}
-
 /* Records list cards */
 .kef-record{
   border-radius:10px;
@@ -169,8 +149,6 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 # -------------- STATE INIT --------------
 if "records" not in st.session_state:
     st.session_state.records = []
-if "filtered_records" not in st.session_state:
-    st.session_state.filtered_records = []
 if "selected_index" not in st.session_state:
     st.session_state.selected_index = None
 
@@ -182,7 +160,6 @@ def fetch_results():
         resp = requests.get(APPS_SCRIPT_URL, timeout=20)
         data = resp.json()
         if isinstance(data, list):
-            # keep only rows that look valid
             rows = [r for r in data if r and (r.get("studentId") or r.get("audioFile"))]
         else:
             rows = []
@@ -317,7 +294,7 @@ st.markdown(
 # -------------- MAIN LAYOUT --------------
 left_col, right_col = st.columns([1.7, 1.3])
 
-# ----- LEFT: Upload + Records -----
+# ===================== LEFT: Upload + Records =====================
 with left_col:
     # Upload card
     st.markdown('<div class="kef-card">', unsafe_allow_html=True)
@@ -337,7 +314,7 @@ with left_col:
     st.markdown("</div>", unsafe_allow_html=True)
 
     status_placeholder = st.empty()
-    progress_bar = st.progress(0, text="")
+    progress_bar = st.progress(0)
 
     col_up1, col_up2 = st.columns([0.4, 0.6])
     with col_up1:
@@ -352,48 +329,27 @@ with left_col:
         if audio_file is None:
             st.warning("Please select an audio file first.")
         else:
-            # POST to Apps Script
+            # POST to Apps Script using multipart/form-data
             try:
                 status_placeholder.info("Uploading file…")
                 progress_bar.progress(10)
-                if start_upload:
-    if audio_file is None:
-        st.warning("Please select an audio file first.")
-    else:
-        try:
-            status_placeholder.info("Uploading file…")
-            progress_bar.progress(10)
 
-            # read raw bytes
-            audio_bytes = audio_file.read()
-            # send raw bytes as body
-            headers = {
-                "Content-Type": audio_file.type or "application/octet-stream"
-            }
-            resp = requests.post(
-                APPS_SCRIPT_URL,
-                data=audio_bytes,
-                headers=headers,
-                timeout=60
-            )
+                files = {
+                    "file": (audio_file.name, audio_file, audio_file.type or "application/octet-stream")
+                }
 
-            try:
-                data = resp.json()
-            except Exception:
-                st.error(f"Non-JSON response from Apps Script: {resp.text[:200]}")
-                data = None
+                resp = requests.post(
+                    APPS_SCRIPT_URL,
+                    files=files,
+                    timeout=120
+                )
 
-        except Exception as e:
-            st.error(f"Error uploading file: {e}")
-            data = None
-
-        if data and data.get("status") == "success":
-            status_placeholder.success("Upload successful. Processing started.")
-            progress_bar.progress(40)
-            file_name = data.get("fileName") or audio_file.name
-            poll_until_result(file_name, status_placeholder, progress_bar)
-        else:
-            st.error(f"Upload failed: {data}")
+                try:
+                    data = resp.json()
+                except Exception:
+                    st.error("Apps Script returned non-JSON response:")
+                    st.error(resp.text)
+                    data = None
 
             except Exception as e:
                 st.error(f"Error uploading file: {e}")
@@ -403,6 +359,7 @@ with left_col:
                 status_placeholder.success("Upload successful. Processing started.")
                 progress_bar.progress(40)
                 file_name = data.get("fileName") or audio_file.name
+
                 # Poll for result
                 poll_until_result(file_name, status_placeholder, progress_bar)
             else:
@@ -426,14 +383,12 @@ with left_col:
 
     # List of record cards
     for idx, rec in enumerate(reversed(records)):
-        real_index = len(records) - 1 - idx  # map back to original
+        real_index = len(records) - 1 - idx  # map back to original index
         student = rec.get("studentId") or rec.get("sn") or "Unnamed"
         mentor = rec.get("mentor", "—")
         audio_name = rec.get("audioFile", "—")
         summary = short(rec.get("summary", ""), 180)
 
-        # clickable card using markdown + button
-        key_btn = f"rec_btn_{real_index}"
         st.markdown(
             f"""
 <div class="kef-record">
@@ -444,13 +399,13 @@ with left_col:
 """,
             unsafe_allow_html=True,
         )
-        if st.button("Open", key=key_btn):
+        if st.button("Open", key=f"rec_btn_{real_index}"):
             st.session_state.selected_index = real_index
         st.markdown("<div style='margin-top:-12px;'></div>", unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)  # close records kef-card
 
-# ----- RIGHT: Quick view + Filter -----
+# ===================== RIGHT: Quick view + Filter =====================
 with right_col:
     st.markdown('<div class="kef-card">', unsafe_allow_html=True)
     st.markdown("#### Quick view")
@@ -470,7 +425,7 @@ with right_col:
         st.write(rec.get("summary", "—"))
 
         st.markdown("##### Detailed Scores & Notes")
-        # grid layout
+
         field_map = [
             ("SN.NO", "sn"),
             ("Mentor", "mentor"),
@@ -499,7 +454,6 @@ with right_col:
             ("Overall Impact", "overallImpact"),
         ]
 
-        # custom HTML grid
         html_fields = '<div class="kef-fields-grid">'
         for label, key in field_map:
             val = rec.get(key, "—")
@@ -583,7 +537,4 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
-
-
-
-
+S
