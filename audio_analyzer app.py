@@ -5,7 +5,7 @@ from io import BytesIO
 from fpdf import FPDF
 
 # ---------------- CONFIG ----------------
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyvV_U-i9UmwKQbhh7gW5Aw5KD8dx0BKZR-9QubZ1VBcVS_6_4F0Y8YW3AjR6Vw-kza/exec"
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyhGYM-KWSr_Vw5yS-Vu0HoBRZ7a5iSq_TutRrZbr7wWEhxVjQyRdf6tZSXnjvlBKEi/exec"
 
 st.set_page_config(
     page_title="KEF Audio Analysis Portal",
@@ -553,3 +553,4 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+
