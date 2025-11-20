@@ -325,45 +325,45 @@ with left_col:
             unsafe_allow_html=True,
         )
 
-    if start_upload:
-        if audio_file is None:
-            st.warning("Please select an audio file first.")
-        else:
-            # POST to Apps Script using multipart/form-data
+   if start_upload:
+    if audio_file is None:
+        st.warning("Please select an audio file first.")
+    else:
+        try:
+            status_placeholder.info("Uploading file…")
+            progress_bar.progress(10)
+
+            # ---- CORRECT WAY: send raw bytes, not multipart ----
+            audio_bytes = audio_file.read()
+
+            resp = requests.post(
+                APPS_SCRIPT_URL,
+                data=audio_bytes,
+                headers={"Content-Type": audio_file.type or "application/octet-stream"},
+                timeout=60
+            )
+
             try:
-                status_placeholder.info("Uploading file…")
-                progress_bar.progress(10)
-
-                files = {
-                    "file": (audio_file.name, audio_file, audio_file.type or "application/octet-stream")
-                }
-
-                resp = requests.post(
-                    APPS_SCRIPT_URL,
-                    files=files,
-                    timeout=120
-                )
-
-                try:
-                    data = resp.json()
-                except Exception:
-                    st.error("Apps Script returned non-JSON response:")
-                    st.error(resp.text)
-                    data = None
-
-            except Exception as e:
-                st.error(f"Error uploading file: {e}")
+                data = resp.json()
+            except Exception:
+                st.error("Apps Script returned non-JSON response:")
+                st.error(resp.text)
                 data = None
 
-            if data and data.get("status") == "success":
-                status_placeholder.success("Upload successful. Processing started.")
-                progress_bar.progress(40)
-                file_name = data.get("fileName") or audio_file.name
+        except Exception as e:
+            st.error(f"Error uploading file: {e}")
+            data = None
 
-                # Poll for result
-                poll_until_result(file_name, status_placeholder, progress_bar)
-            else:
-                st.error(f"Upload failed: {data}")
+        if data and data.get("status") == "success":
+            status_placeholder.success("Upload successful. Processing started.")
+            progress_bar.progress(40)
+
+            file_name = data.get("fileName") or audio_file.name
+
+            poll_until_result(file_name, status_placeholder, progress_bar)
+        else:
+            st.error(f"Upload failed: {data}")
+
 
     st.markdown("</div>", unsafe_allow_html=True)  # close upload kef-card
 
@@ -538,4 +538,5 @@ st.markdown(
     unsafe_allow_html=True,
 )
 S
+
 
