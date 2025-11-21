@@ -84,19 +84,37 @@ if "selected_index" not in st.session_state:
 
 
 # ---------------- HELPERS ----------------
+# ⭐ UPDATED FUNCTION – ONLY LOAD NEW ROWS ⭐
 def fetch_results():
     try:
         resp = requests.get(APPS_SCRIPT_URL, timeout=20)
-        data = resp.json()
-        if isinstance(data, list):
-            rows = [r for r in data if r.get("studentId") or r.get("audioFile")]
-        else:
-            rows = []
-        st.session_state.records = rows
-        return rows
+        sheet_rows = resp.json()
+
+        if not isinstance(sheet_rows, list) or len(sheet_rows) == 0:
+            return st.session_state.records
+
+        latest_row = sheet_rows[-1]   # newest sheet row
+
+        # If first time → load all
+        if len(st.session_state.records) == 0:
+            st.session_state.records = sheet_rows
+            return st.session_state.records
+
+        # Compare with last local row
+        last_local = st.session_state.records[-1]
+
+        # If new → append only latest
+        if latest_row != last_local:
+            st.session_state.records.append(latest_row)
+            # auto-focus latest record
+            st.session_state.selected_index = len(st.session_state.records) - 1
+
+        return st.session_state.records
+
     except Exception as e:
         st.error(f"Error fetching results (doGet): {e}")
         return st.session_state.records
+
 
 
 def short(text, n=200):
@@ -111,11 +129,13 @@ def poll_until_result(file_name, placeholder, progress):
         placeholder.info(f"Waiting for analysis… attempt {attempt}")
 
         rows = fetch_results()
-        for i, r in enumerate(rows):
-            if file_name.lower() in str(r.get("audioFile", "")).lower():
-                st.success("Analysis complete!")
-                st.session_state.selected_index = i
-                return True
+        latest = rows[-1]
+
+        # matching new row
+        if file_name.lower() in str(latest.get("audioFile", "")).lower():
+            st.success("Analysis complete!")
+            st.session_state.selected_index = len(rows) - 1
+            return True
 
     st.error("Timeout. Analysis took too long. Try refreshing records manually.")
     return False
@@ -163,7 +183,6 @@ with left:
                 status_msg.info("Uploading file…")
                 progress.progress(10)
 
-                # Convert audio to Base64
                 audio_file.seek(0)
                 raw_bytes = audio_file.read()
                 base64_audio = base64.b64encode(raw_bytes).decode("utf-8")
