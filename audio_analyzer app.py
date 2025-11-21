@@ -4,7 +4,7 @@ import time
 from io import BytesIO
 
 # ---------------- CONFIG ----------------
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyIwuqAKbqBWs-IbPhWaGKviHEX0X9xZgXA1vCH9zihSdRBbHba_-RS5kIFAt9rULEG/exec" 
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz2M73n611HcmdbEEHfjY8d05vV4WkBb4tVdL5NXagD1W5S1ckyu2F1QaVUtwUkR052/exec" 
 
 st.set_page_config(
     page_title="KEF Audio Analysis Portal",
@@ -290,3 +290,4 @@ with right:
     st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("<div class='kef-tiny' style='text-align:center;'>KEF Audio Analysis Portal</div>", unsafe_allow_html=True)
+
