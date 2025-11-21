@@ -87,7 +87,7 @@ if "selected_index" not in st.session_state:
 # ⭐ UPDATED FUNCTION – ONLY LOAD NEW ROWS ⭐
 def fetch_results():
     try:
-        resp = requests.get(APPS_SCRIPT_URL, timeout=20)
+        resp = requests.get(APPS_SCRIPT_URL + f"?t={time.time()}", timeout=20)
         sheet_rows = resp.json()
 
         if not isinstance(sheet_rows, list) or len(sheet_rows) == 0:
@@ -313,3 +313,4 @@ with right:
     st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("<div class='kef-tiny' style='text-align:center;'>KEF Audio Analysis Portal</div>", unsafe_allow_html=True)
+
