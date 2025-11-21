@@ -1,10 +1,11 @@
 import streamlit as st
 import requests
 import time
+import base64
 from io import BytesIO
 
 # ---------------- CONFIG ----------------
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw31OK4WlioYGmbjUBgQxJ50gawqCbZAuAWVmchG1QsOumNM1l40MJ-s5hoMPu6gUkC/exec" 
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwQL9AzyGVKywaDJhAzPujmU_ynLoCzhm14dWc18v0RBJGdPaF3C1ZlM93l0-GsGRpM/exec" 
 
 st.set_page_config(
     page_title="KEF Audio Analysis Portal",
@@ -153,7 +154,7 @@ with left:
 
     start_upload = st.button("Start Upload")
 
-    # ---- CORRECTED UPLOAD LOGIC ----
+    # ---- CORRECTED UPLOAD LOGIC (BASE64) ----
     if start_upload:
         if not audio_file:
             st.warning("Please select an audio file first.")
@@ -162,18 +163,22 @@ with left:
                 status_msg.info("Uploading file…")
                 progress.progress(10)
 
-                # -------------- FIXED UPLOAD (multipart/form-data) -----------------
+                # Convert audio to Base64
                 audio_file.seek(0)
-                files = {
-                    "file": (audio_file.name, audio_file.read(), audio_file.type or "application/octet-stream")
+                raw_bytes = audio_file.read()
+                base64_audio = base64.b64encode(raw_bytes).decode("utf-8")
+
+                payload = {
+                    "filename": audio_file.name,
+                    "mimeType": audio_file.type,
+                    "fileData": base64_audio
                 }
 
                 resp = requests.post(
                     APPS_SCRIPT_URL,
-                    files=files,                           # (important fix    # send filename
+                    json=payload,
                     timeout=120
                 )
-                # ---------------------------------------------------------------------
 
                 try:
                     data = resp.json()
@@ -289,5 +294,3 @@ with right:
     st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("<div class='kef-tiny' style='text-align:center;'>KEF Audio Analysis Portal</div>", unsafe_allow_html=True)
-
-
