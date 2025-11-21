@@ -4,7 +4,7 @@ import time
 from io import BytesIO
 
 # ---------------- CONFIG ----------------
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz2M73n611HcmdbEEHfjY8d05vV4WkBb4tVdL5NXagD1W5S1ckyu2F1QaVUtwUkR052/exec" 
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw31OK4WlioYGmbjUBgQxJ50gawqCbZAuAWVmchG1QsOumNM1l40MJ-s5hoMPu6gUkC/exec" 
 
 st.set_page_config(
     page_title="KEF Audio Analysis Portal",
@@ -170,8 +170,7 @@ with left:
 
                 resp = requests.post(
                     APPS_SCRIPT_URL,
-                    files=files,                           # (important fix)
-                    data={"filename": audio_file.name},    # send filename
+                    files=files,                           # (important fix    # send filename
                     timeout=120
                 )
                 # ---------------------------------------------------------------------
@@ -290,4 +289,5 @@ with right:
     st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("<div class='kef-tiny' style='text-align:center;'>KEF Audio Analysis Portal</div>", unsafe_allow_html=True)
+
 
