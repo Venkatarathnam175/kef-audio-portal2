@@ -7,7 +7,7 @@ from io import BytesIO
 # !!! IMPORTANT !!!
 # 1. Deploy the Apps Script (File 2) as a Web App (Execute as: Me, Who has access: Anyone).
 # 2. Use the final URL ending in /exec here.
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyLCsEVZW-2raN1Wv9paHPQ7L4F1gnIFf50mJX8gde_BtJh-tyz3jBlq5z9V8FheotY/exec" 
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzw1OFViqB02cEAhYN4WGlMVUozZrXzkov0qbkmOite1qnMaYmC2_C1T__i16kcKvNn/exec" 
 
 st.set_page_config(
     page_title="KEF Audio Analysis Portal",
@@ -303,3 +303,4 @@ with right:
 
 # Footer
 st.markdown("<div class='kef-tiny' style='text-align:center;'>KEF Audio Analysis Portal</div>", unsafe_allow_html=True)
+
