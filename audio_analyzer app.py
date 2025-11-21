@@ -4,10 +4,7 @@ import time
 from io import BytesIO
 
 # ---------------- CONFIG ----------------
-# !!! IMPORTANT !!!
-# 1. Deploy the Apps Script (File 2) as a Web App (Execute as: Me, Who has access: Anyone).
-# 2. Use the final URL ending in /exec here.
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzw1OFViqB02cEAhYN4WGlMVUozZrXzkov0qbkmOite1qnMaYmC2_C1T__i16kcKvNn/exec" 
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyIwuqAKbqBWs-IbPhWaGKviHEX0X9xZgXA1vCH9zihSdRBbHba_-RS5kIFAt9rULEG/exec" 
 
 st.set_page_config(
     page_title="KEF Audio Analysis Portal",
@@ -87,12 +84,10 @@ if "selected_index" not in st.session_state:
 
 # ---------------- HELPERS ----------------
 def fetch_results():
-    """Fetches analysis results from the Google Sheet via Apps Script doGet."""
     try:
         resp = requests.get(APPS_SCRIPT_URL, timeout=20)
         data = resp.json()
         if isinstance(data, list):
-            # Filter out empty rows if necessary
             rows = [r for r in data if r.get("studentId") or r.get("audioFile")]
         else:
             rows = []
@@ -104,13 +99,11 @@ def fetch_results():
 
 
 def short(text, n=200):
-    """Truncates text for summary preview."""
     if not text: return ""
     return text if len(text) <= n else text[:n] + "…"
 
 
 def poll_until_result(file_name, placeholder, progress):
-    """Polls the Apps Script every 4 seconds until the file analysis appears in the sheet."""
     for attempt in range(1, 61):
         time.sleep(4)
         progress.progress(min(100, attempt * 2))
@@ -118,7 +111,6 @@ def poll_until_result(file_name, placeholder, progress):
 
         rows = fetch_results()
         for i, r in enumerate(rows):
-            # Check if the uploaded file name is in the result (case-insensitive check added)
             if file_name.lower() in str(r.get("audioFile", "")).lower():
                 st.success("Analysis complete!")
                 st.session_state.selected_index = i
@@ -148,7 +140,6 @@ left, right = st.columns([1.7, 1.3])
 # =========================================================
 with left:
 
-    # Upload block
     st.markdown('<div class="kef-card">', unsafe_allow_html=True)
     st.markdown("### Upload audio")
     st.markdown('<p class="kef-muted">Uploads audio and sends to Drive.</p>', unsafe_allow_html=True)
@@ -171,19 +162,20 @@ with left:
                 status_msg.info("Uploading file…")
                 progress.progress(10)
 
-                # --- NEW APPROACH: Send file as raw bytes with a query param ---
+                # -------------- FIXED UPLOAD (multipart/form-data) -----------------
                 audio_file.seek(0)
-                
-                # Send raw file content in 'data' field, and filename via 'params'
+                files = {
+                    "file": (audio_file.name, audio_file.read(), audio_file.type or "application/octet-stream")
+                }
+
                 resp = requests.post(
-                    APPS_SCRIPT_URL, 
-                    data=audio_file.read(),
-                    headers={"Content-Type": audio_file.type or "application/octet-stream"},
-                    params={"filename": audio_file.name},
+                    APPS_SCRIPT_URL,
+                    files=files,                           # (important fix)
+                    data={"filename": audio_file.name},    # send filename
                     timeout=120
                 )
+                # ---------------------------------------------------------------------
 
-                # --- Handle Apps Script Response ---
                 try:
                     data = resp.json()
                 except:
@@ -196,7 +188,6 @@ with left:
                     progress.progress(40)
 
                     file_name = data.get("fileName") or audio_file.name
-                    # Start polling for the result in the Google Sheet
                     poll_until_result(file_name, status_msg, progress)
 
                 else:
@@ -227,7 +218,6 @@ with left:
 </div>
 """, unsafe_allow_html=True)
 
-        # Use a lambda function to update the state when the button is pressed
         if st.button("Open", key=f"open_{real_idx}", on_click=lambda i=real_idx: st.session_state.__setitem__('selected_index', i)):
             pass
 
@@ -275,7 +265,6 @@ with right:
 
         html = '<div class="kef-fields-grid">'
         for label, key in fields:
-            # Use '—' for empty values
             value = str(rec.get(key, '—')) if rec.get(key) is not None else '—'
             html += f"""
 <div class="kef-field">
@@ -290,7 +279,6 @@ with right:
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Info
     st.markdown('<div class="kef-card">', unsafe_allow_html=True)
     st.markdown("""
 <ol class='kef-tiny'>
@@ -301,6 +289,4 @@ with right:
 """, unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-# Footer
 st.markdown("<div class='kef-tiny' style='text-align:center;'>KEF Audio Analysis Portal</div>", unsafe_allow_html=True)
-
