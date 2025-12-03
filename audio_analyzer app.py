@@ -10,7 +10,7 @@ APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwQL9AzyGVKywaDJhAzPu
 
 # NEW: n8n endpoint that returns ALL analysis records as JSON list
 # 👇 REPLACE THIS with your actual n8n webhook URL
-N8N_RESULTS_URL = "https://YOUR-N8N-DOMAIN/webhook/audio-results"
+N8N_RESULTS_URL = "https://aiagent2.app.n8n.cloud/webhook/audio-results"
 
 st.set_page_config(
     page_title="KEF Audio Analysis Portal",
@@ -321,3 +321,4 @@ with right:
     st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("<div class='kef-tiny' style='text-align:center;'>KEF Audio Analysis Portal</div>", unsafe_allow_html=True)
+
