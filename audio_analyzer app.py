@@ -150,7 +150,7 @@ with left:
 
     st.markdown('<div class="kef-card">', unsafe_allow_html=True)
     st.markdown("### Upload audio")
-    st.markmarkdown('<p class="kef-muted">Uploads audio and sends to Drive.</p>', unsafe_allow_html=True)
+    st.markdown('<p class="kef-muted">Uploads audio and sends to Drive.</p>', unsafe_allow_html=True)
 
     st.markdown('<div class="kef-drop-wrapper">', unsafe_allow_html=True)
     audio_file = st.file_uploader("Drag & drop audio here", type=["mp3", "wav", "m4a"])
@@ -295,3 +295,4 @@ with right:
     st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("<div class='kef-tiny' style='text-align:center;'>KEF Audio Analysis Portal</div>", unsafe_allow_html=True)
+
