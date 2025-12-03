@@ -96,18 +96,14 @@ def short(text, n=200):
     return text if len(text) <= n else text[:n] + "…"
 
 
-# ---------------- POLLING LOGIC (FINAL VERSION) ----------------
+# ---------------- POLLING FIX (FINAL VERSION) ----------------
 def poll_until_result(file_name, placeholder, progress):
-    """
-    Detect completion by comparing BEFORE vs AFTER row.
-    Works even when Data Table always has ONLY ONE row.
-    """
+
     try:
         initial = fetch_results()
     except:
         initial = []
 
-    # Baseline row before audio analysis
     baseline = initial[-1].copy() if initial else None
 
     for attempt in range(1, 61):
@@ -121,21 +117,27 @@ def poll_until_result(file_name, placeholder, progress):
 
         latest = rows[-1]
 
-        # Case 1: No baseline exists (first ever run)
+        # CASE 1 — first ever run
         if baseline is None:
             if latest.get("summary") not in (None, "", "null"):
                 st.success("Analysis complete!")
-                st.session_state.selected_index = 0
+                placeholder.empty()
+                progress.empty()
+                st.session_state.selected_index = len(rows) - 1
                 return True
 
-        # Case 2: Row changed after analysis → DONE
+        # CASE 2 — row changed
         else:
             if latest != baseline:
                 st.success("Analysis complete!")
-                st.session_state.selected_index = 0
+                placeholder.empty()
+                progress.empty()
+                st.session_state.selected_index = len(rows) - 1
                 return True
 
     st.error("Timeout. Analysis took too long. Try refreshing manually.")
+    placeholder.empty()
+    progress.empty()
     return False
 
 
