@@ -2,12 +2,9 @@ import streamlit as st
 import requests
 import time
 import base64
-from io import BytesIO
 
 # ---------------- CONFIG ----------------
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwQL9AzyGVKywaDJhAzPujmU_ynLoCzhm14dWc18v0RBJGdPaF3C1ZlM93l0-GsGRpM/exec" 
-
-# NEW — n8n JSON results endpoint
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwQL9AzyGVKywaDJhAzPujmU_ynLoCzhm14dWc18v0RBJGdPaF3C1ZlM93l0-GsGRpM/exec"
 N8N_RESULTS_URL = "https://aiagent2.app.n8n.cloud/webhook/audio-results"
 
 st.set_page_config(
@@ -30,7 +27,6 @@ html, body, [data-testid="stAppViewContainer"] {
   border-radius:0 0 16px 16px; display:flex; gap:16px;
   margin:-1rem -1rem 1.2rem -1rem; box-shadow:0 10px 30px rgba(2,6,23,0.25);
 }
-
 .kef-logo{ width:130px; object-fit:contain; }
 .kef-brand{ font-size:20px; font-weight:700; }
 .kef-subtitle{ font-size:13px; opacity:0.95; }
@@ -42,7 +38,6 @@ html, body, [data-testid="stAppViewContainer"] {
 }
 
 .kef-muted{ color:#506072; font-size:13px; }
-
 .kef-drop-wrapper{
   border:2px dashed #dfe7f2; border-radius:12px;
   padding:18px 16px; background:rgba(0,0,0,0.02);
@@ -53,7 +48,6 @@ html, body, [data-testid="stAppViewContainer"] {
   background:#fff; border:1px solid #eef6ff;
   margin-bottom:10px; cursor:pointer;
 }
-
 .kef-record-title{
   font-weight:700; color:#003874; font-size:14px;
 }
@@ -61,7 +55,6 @@ html, body, [data-testid="stAppViewContainer"] {
 .kef-fields-grid{
   display:grid; grid-template-columns:1fr 1fr; gap:8px;
 }
-
 @media (max-width: 900px){
   .kef-fields-grid{ grid-template-columns:1fr; }
 }
@@ -70,7 +63,6 @@ html, body, [data-testid="stAppViewContainer"] {
   background:#f8fbff; padding:8px; border-radius:8px;
   border:1px solid #eef6ff;
 }
-
 .kef-field-label{ font-weight:700; font-size:11px; color:#1f496b; }
 .kef-field-val{ font-size:12px; color:#123; }
 
@@ -85,22 +77,17 @@ if "records" not in st.session_state:
 if "selected_index" not in st.session_state:
     st.session_state.selected_index = None
 
-# ---------------- HELPERS ----------------
 
-# ⭐ FETCH ONLY FROM n8n — Google Sheet removed completely
+# ---------------- HELPERS ----------------
 def fetch_results():
+    """Fetch only from n8n webhook."""
     try:
         resp = requests.get(N8N_RESULTS_URL + f"?t={time.time()}", timeout=20)
         data = resp.json()
-
-        # Must be a list of row objects
         if isinstance(data, list):
             st.session_state.records = data
-
         return st.session_state.records
-
-    except Exception as e:
-        st.error(f"Error fetching results from n8n: {e}")
+    except:
         return st.session_state.records
 
 
@@ -109,7 +96,20 @@ def short(text, n=200):
     return text if len(text) <= n else text[:n] + "…"
 
 
+# ---------------- POLLING LOGIC (FINAL VERSION) ----------------
 def poll_until_result(file_name, placeholder, progress):
+    """
+    Detect completion by comparing BEFORE vs AFTER row.
+    Works even when Data Table always has ONLY ONE row.
+    """
+    try:
+        initial = fetch_results()
+    except:
+        initial = []
+
+    # Baseline row before audio analysis
+    baseline = initial[-1].copy() if initial else None
+
     for attempt in range(1, 61):
         time.sleep(4)
         progress.progress(min(100, attempt * 2))
@@ -121,13 +121,24 @@ def poll_until_result(file_name, placeholder, progress):
 
         latest = rows[-1]
 
-        if file_name.lower() in str(latest.get("audioFile", "")).lower():
-            st.success("Analysis complete!")
-            st.session_state.selected_index = len(rows) - 1
-            return True
+        # Case 1: No baseline exists (first ever run)
+        if baseline is None:
+            if latest.get("summary") not in (None, "", "null"):
+                st.success("Analysis complete!")
+                st.session_state.selected_index = 0
+                return True
 
-    st.error("Timeout. Analysis took too long. Try refreshing records manually.")
+        # Case 2: Row changed after analysis → DONE
+        else:
+            if latest != baseline:
+                st.success("Analysis complete!")
+                st.session_state.selected_index = 0
+                return True
+
+    st.error("Timeout. Analysis took too long. Try refreshing manually.")
     return False
+
+
 
 # ---------------- HEADER ----------------
 st.markdown("""
@@ -140,11 +151,13 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+
 # ---------------- MAIN LAYOUT ----------------
 left, right = st.columns([1.7, 1.3])
 
+
 # =========================================================
-# LEFT SIDE – UPLOAD + RECORD LIST
+# LEFT SIDE — UPLOAD + RECORDS
 # =========================================================
 with left:
 
@@ -159,9 +172,7 @@ with left:
     status_msg = st.empty()
     progress = st.progress(0)
 
-    start_upload = st.button("Start Upload")
-
-    if start_upload:
+    if st.button("Start Upload"):
         if not audio_file:
             st.warning("Please select an audio file first.")
         else:
@@ -169,65 +180,53 @@ with left:
                 status_msg.info("Uploading file…")
                 progress.progress(10)
 
-                audio_file.seek(0)
                 raw_bytes = audio_file.read()
-                base64_audio = base64.b64encode(raw_bytes).decode("utf-8")
+                b64 = base64.b64encode(raw_bytes).decode("utf-8")
 
                 payload = {
                     "filename": audio_file.name,
                     "mimeType": audio_file.type,
-                    "fileData": base64_audio
+                    "fileData": b64
                 }
 
-                resp = requests.post(APPS_SCRIPT_URL, json=payload, timeout=120)
+                r = requests.post(APPS_SCRIPT_URL, json=payload, timeout=120)
+                data = r.json()
 
-                try:
-                    data = resp.json()
-                except:
-                    st.error("Apps Script returned non-JSON. Check Apps Script logs for errors.")
-                    st.error(resp.text)
-                    data = None
-                
-                if data and data.get("status") == "success":
-                    status_msg.success("Upload successful! Waiting for analysis.")
-                    progress.progress(40)
-
-                    file_name = data.get("fileName") or audio_file.name
-                    poll_until_result(file_name, status_msg, progress)
-
+                if data.get("status") == "success":
+                    status_msg.success("Upload success! Waiting for analysis…")
+                    poll_until_result(audio_file.name, status_msg, progress)
                 else:
-                    st.error(f"Upload failed: {data}")
+                    st.error("Upload failed.")
 
             except Exception as e:
-                st.error(f"Upload error (requests failed): {e}")
+                st.error(f"Error: {e}")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Records block
+    # RECORDS LIST
     st.markdown('<div class="kef-card">', unsafe_allow_html=True)
     st.markdown("### Uploaded records")
 
     if st.button("Refresh records"):
         fetch_results()
 
-    records = st.session_state.records
-
-    for idx, rec in enumerate(reversed(records)):
-        real_idx = len(records) - 1 - idx
-
+    for idx, rec in enumerate(st.session_state.records):
         st.markdown(
             f"""
 <div class="kef-record">
-  <div class="kef-record-title">{rec.get('studentId', 'Unnamed')}</div>
+  <div class="kef-record-title">{rec.get('studentId','Unnamed')}</div>
   <div class="kef-record-sub">Mentor: {rec.get('mentor','—')} • File: {rec.get('audioFile','—')}</div>
   <div class="kef-record-summary">{short(rec.get('summary',""))}</div>
 </div>
-""", unsafe_allow_html=True)
-
-        if st.button("Open", key=f"open_{real_idx}", on_click=lambda i=real_idx: st.session_state.__setitem__('selected_index', i)):
-            pass
+""",
+            unsafe_allow_html=True
+        )
+        if st.button("Open", key=f"open_{idx}"):
+            st.session_state.selected_index = idx
 
     st.markdown('</div>', unsafe_allow_html=True)
+
+
 
 # =========================================================
 # RIGHT SIDE — QUICK VIEW
@@ -249,50 +248,44 @@ with right:
         )
 
         st.markdown("##### Summary")
-        st.write(rec.get("summary", "—"))
+        st.write(rec.get("summary","—"))
 
-        st.markdown("##### Details")
         fields = [
-            ("SN.NO","sn"), ("Mentor","mentor"), ("Student ID","studentId"),
-            ("Audio File","audioFile"), ("Voice Modulation","voiceModulation"),
+            ("Voice Modulation","voiceModulation"),
             ("Supportive Environment","supportiveEnvironment"),
-            ("Positive Approach","positiveApproach"), ("Polite Introduction","politeIntroduction"),
-            ("Language Comfort","languageComfort"), ("Active Listening","activeListening"),
-            ("Positive Language","positiveLanguage"), ("Probing Questions","probingQuestions"),
-            ("Open-Ended Questions","openQuestions"), ("Student Comfort","studentComfort"),
-            ("Exploration Areas","explorationAreas"), ("Academic Progress","academicProgress"),
-            ("Career Goals","careerGoals"), ("Challenges Identified","challengesIdentified"),
-            ("Guidance Provided","guidanceProvided"), ("Scholarship Discussion","scholarshipDiscussion"),
-            ("Next Steps","nextSteps"), ("Student Agreed","studentAgreed"),
-            ("Mentor Listened","mentorListened"), ("Provides Guidance","providesGuidance"),
+            ("Positive Approach","positiveApproach"),
+            ("Polite Introduction","politeIntroduction"),
+            ("Language Comfort","languageComfort"),
+            ("Active Listening","activeListening"),
+            ("Positive Language","positiveLanguage"),
+            ("Probing Questions","probingQuestions"),
+            ("Open Questions","openQuestions"),
+            ("Student Comfort","studentComfort"),
+            ("Exploration Areas","explorationAreas"),
+            ("Academic Progress","academicProgress"),
+            ("Career Goals","careerGoals"),
+            ("Challenges Identified","challengesIdentified"),
+            ("Guidance Provided","guidanceProvided"),
+            ("Scholarship Discussion","scholarshipDiscussion"),
+            ("Next Steps","nextSteps"),
             ("Overall Impact","overallImpact")
         ]
 
         html = '<div class="kef-fields-grid">'
-        for label, key in fields:
-            value = str(rec.get(key, '—')) if rec.get(key) is not None else '—'
+        for lbl, key in fields:
             html += f"""
 <div class="kef-field">
-  <div class="kef-field-label">{label}</div>
-  <div class="kef-field-val">{value}</div>
+  <div class="kef-field-label">{lbl}</div>
+  <div class="kef-field-val">{rec.get(key,'—')}</div>
 </div>
 """
         html += "</div>"
         st.markdown(html, unsafe_allow_html=True)
+
     else:
         st.markdown('<p class="kef-muted">Select a record from the left.</p>', unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="kef-card">', unsafe_allow_html=True)
-    st.markdown("""
-<ol class='kef-tiny'>
-<li>Upload → Stored to Google Drive</li>
-<li>n8n analyzes audio → Saves final JSON</li>
-<li>Portal reads from n8n and displays results</li>
-</ol>
-""", unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("<div class='kef-tiny' style='text-align:center;'>KEF Audio Analysis Portal</div>", unsafe_allow_html=True)
-
