@@ -5,7 +5,12 @@ import base64
 from io import BytesIO
 
 # ---------------- CONFIG ----------------
+# Used ONLY for uploading the audio file (no more sheet fetching)
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwQL9AzyGVKywaDJhAzPujmU_ynLoCzhm14dWc18v0RBJGdPaF3C1ZlM93l0-GsGRpM/exec" 
+
+# NEW: n8n endpoint that returns ALL analysis records as JSON list
+# 👇 REPLACE THIS with your actual n8n webhook URL
+N8N_RESULTS_URL = "https://YOUR-N8N-DOMAIN/webhook/audio-results"
 
 st.set_page_config(
     page_title="KEF Audio Analysis Portal",
@@ -84,16 +89,17 @@ if "selected_index" not in st.session_state:
 
 
 # ---------------- HELPERS ----------------
-# ⭐ UPDATED FUNCTION – ONLY LOAD NEW ROWS ⭐
+# ⭐ NOW FETCHING FROM n8n INSTEAD OF GOOGLE SHEET ⭐
 def fetch_results():
     try:
-        resp = requests.get(APPS_SCRIPT_URL + f"?t={time.time()}", timeout=20)
+        # n8n webhook should return a JSON list of row-objects
+        resp = requests.get(N8N_RESULTS_URL + f"?t={time.time()}", timeout=20)
         sheet_rows = resp.json()
 
         if not isinstance(sheet_rows, list) or len(sheet_rows) == 0:
             return st.session_state.records
 
-        latest_row = sheet_rows[-1]   # newest sheet row
+        latest_row = sheet_rows[-1]   # newest record
 
         # If first time → load all
         if len(st.session_state.records) == 0:
@@ -112,9 +118,8 @@ def fetch_results():
         return st.session_state.records
 
     except Exception as e:
-        st.error(f"Error fetching results (doGet): {e}")
+        st.error(f"Error fetching results from n8n: {e}")
         return st.session_state.records
-
 
 
 def short(text, n=200):
@@ -129,6 +134,9 @@ def poll_until_result(file_name, placeholder, progress):
         placeholder.info(f"Waiting for analysis… attempt {attempt}")
 
         rows = fetch_results()
+        if not rows:
+            continue
+
         latest = rows[-1]
 
         # matching new row
@@ -306,11 +314,10 @@ with right:
     st.markdown("""
 <ol class='kef-tiny'>
 <li>Upload → Stored to Google Drive</li>
-<li>n8n analyzes audio → Writes to Google Sheet</li>
-<li>Portal reads sheet and displays results</li>
+<li>n8n analyzes audio → Saves final JSON</li>
+<li>Portal reads from n8n and displays results</li>
 </ol>
 """, unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("<div class='kef-tiny' style='text-align:center;'>KEF Audio Analysis Portal</div>", unsafe_allow_html=True)
-
