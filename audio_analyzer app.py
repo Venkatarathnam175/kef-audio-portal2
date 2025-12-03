@@ -5,11 +5,9 @@ import base64
 from io import BytesIO
 
 # ---------------- CONFIG ----------------
-# Used ONLY for uploading the audio file (no more sheet fetching)
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwQL9AzyGVKywaDJhAzPujmU_ynLoCzhm14dWc18v0RBJGdPaF3C1ZlM93l0-GsGRpM/exec" 
 
-# NEW: n8n endpoint that returns ALL analysis records as JSON list
-# 👇 REPLACE THIS with your actual n8n webhook URL
+# NEW — n8n JSON results endpoint
 N8N_RESULTS_URL = "https://aiagent2.app.n8n.cloud/webhook/audio-results"
 
 st.set_page_config(
@@ -87,33 +85,17 @@ if "records" not in st.session_state:
 if "selected_index" not in st.session_state:
     st.session_state.selected_index = None
 
-
 # ---------------- HELPERS ----------------
-# ⭐ NOW FETCHING FROM n8n INSTEAD OF GOOGLE SHEET ⭐
+
+# ⭐ FETCH ONLY FROM n8n — Google Sheet removed completely
 def fetch_results():
     try:
-        # n8n webhook should return a JSON list of row-objects
         resp = requests.get(N8N_RESULTS_URL + f"?t={time.time()}", timeout=20)
-        sheet_rows = resp.json()
+        data = resp.json()
 
-        if not isinstance(sheet_rows, list) or len(sheet_rows) == 0:
-            return st.session_state.records
-
-        latest_row = sheet_rows[-1]   # newest record
-
-        # If first time → load all
-        if len(st.session_state.records) == 0:
-            st.session_state.records = sheet_rows
-            return st.session_state.records
-
-        # Compare with last local row
-        last_local = st.session_state.records[-1]
-
-        # If new → append only latest
-        if latest_row != last_local:
-            st.session_state.records.append(latest_row)
-            # auto-focus latest record
-            st.session_state.selected_index = len(st.session_state.records) - 1
+        # Must be a list of row objects
+        if isinstance(data, list):
+            st.session_state.records = data
 
         return st.session_state.records
 
@@ -139,7 +121,6 @@ def poll_until_result(file_name, placeholder, progress):
 
         latest = rows[-1]
 
-        # matching new row
         if file_name.lower() in str(latest.get("audioFile", "")).lower():
             st.success("Analysis complete!")
             st.session_state.selected_index = len(rows) - 1
@@ -147,7 +128,6 @@ def poll_until_result(file_name, placeholder, progress):
 
     st.error("Timeout. Analysis took too long. Try refreshing records manually.")
     return False
-
 
 # ---------------- HEADER ----------------
 st.markdown("""
@@ -160,7 +140,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-
 # ---------------- MAIN LAYOUT ----------------
 left, right = st.columns([1.7, 1.3])
 
@@ -171,7 +150,7 @@ with left:
 
     st.markdown('<div class="kef-card">', unsafe_allow_html=True)
     st.markdown("### Upload audio")
-    st.markdown('<p class="kef-muted">Uploads audio and sends to Drive.</p>', unsafe_allow_html=True)
+    st.markmarkdown('<p class="kef-muted">Uploads audio and sends to Drive.</p>', unsafe_allow_html=True)
 
     st.markdown('<div class="kef-drop-wrapper">', unsafe_allow_html=True)
     audio_file = st.file_uploader("Drag & drop audio here", type=["mp3", "wav", "m4a"])
@@ -182,7 +161,6 @@ with left:
 
     start_upload = st.button("Start Upload")
 
-    # ---- CORRECTED UPLOAD LOGIC (BASE64) ----
     if start_upload:
         if not audio_file:
             st.warning("Please select an audio file first.")
@@ -201,11 +179,7 @@ with left:
                     "fileData": base64_audio
                 }
 
-                resp = requests.post(
-                    APPS_SCRIPT_URL,
-                    json=payload,
-                    timeout=120
-                )
+                resp = requests.post(APPS_SCRIPT_URL, json=payload, timeout=120)
 
                 try:
                     data = resp.json()
@@ -215,7 +189,7 @@ with left:
                     data = None
                 
                 if data and data.get("status") == "success":
-                    status_msg.success("Upload successful! Starting analysis watch.")
+                    status_msg.success("Upload successful! Waiting for analysis.")
                     progress.progress(40)
 
                     file_name = data.get("fileName") or audio_file.name
@@ -226,7 +200,7 @@ with left:
 
             except Exception as e:
                 st.error(f"Upload error (requests failed): {e}")
-                
+
     st.markdown('</div>', unsafe_allow_html=True)
 
     # Records block
@@ -240,6 +214,7 @@ with left:
 
     for idx, rec in enumerate(reversed(records)):
         real_idx = len(records) - 1 - idx
+
         st.markdown(
             f"""
 <div class="kef-record">
@@ -253,7 +228,6 @@ with left:
             pass
 
     st.markdown('</div>', unsafe_allow_html=True)
-
 
 # =========================================================
 # RIGHT SIDE — QUICK VIEW
@@ -321,5 +295,3 @@ with right:
     st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("<div class='kef-tiny' style='text-align:center;'>KEF Audio Analysis Portal</div>", unsafe_allow_html=True)
-
-
